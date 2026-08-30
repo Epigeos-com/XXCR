@@ -11,3 +11,7 @@ python XXCR.py config
 python XXCR.py help
 ```
 You can backup the files manually and it will likely go a lot faster than through python
+
+## Special thanks
+[Youjose](https://github.com/Youjose) - for creating [CriCodecs](https://github.com/Youjose/CriCodecs), which this app heavily relies on, and for great help on getting it working ;)  
+[failsafe65](https://gamebanana.com/members/3093014) - for figuring out how to modify the cutscenes at all

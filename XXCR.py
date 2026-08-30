@@ -1,12 +1,13 @@
 from cricodecs import hca, usm
 import sys
 import os
-from datetime import datetime, timezone
 import shutil
 from ffmpeg import FFmpeg
 from pathlib import Path
 import zipfile
 import io
+import subprocess
+import platform
 
 # TODO: Make the backup optional or partial?
 
@@ -23,8 +24,11 @@ def print_help():
     print("      NOTE: Any file format that can be converted by ffmpeg into ivf for video or wav for audio is supported.")
     print("      NOTE: Files that have a very different resolution than the original may break.")
     print("      NOTE: Files passed with -a are treated as a kind of default, the language-specific choices override it.")
+    print("      NOTE: If you pass the cutscene name as something starting with '*', it'll become a wildcard that can be assigned to any cutscene on apply.")
     print("\n   XXCR.py compress <mod_name>")
     print("      NOTE: This does not differ from compressing the mod folder into a zip file by other means")
+    print("\n   XXCR.py cutscenes (GI|ZZ|SR) <separator>")
+    print("      NOTE: Displays all available cutscenes")
 
 game_id_from_name = {"gi": 0, "zz": 1, "sr": 2}
 def get_config():
@@ -42,10 +46,13 @@ def get_mod_game(mod_name):
 def get_mod_video_file_location(mod):
     return get_config()[game_id_from_name[get_mod_game(mod)]][:-1]
 
-def cp(src, dst): # Idk, I copied this from somewhere cuz it was supposed to be faster than the vanilla thing, but it's still horribly slow # TODO
-    with open(src, 'rb') as fin:
-        with open(dst, 'wb') as fout:
-            shutil.copyfileobj(fin, fout, 128*1024)
+def cp(src, dst):
+    if (platform.system() == "Linux"):
+        subprocess.run(['cp', src, dst])
+    else:
+        with open(src, 'rb') as fin: # Idk, I copied this from somewhere cuz it was supposed to be faster than the vanilla thing, but it's still horribly slow # TODO
+            with open(dst, 'wb') as fout:
+                shutil.copyfileobj(fin, fout, 128*1024)
 
 def main():
     if (len(sys.argv) == 1):
@@ -54,8 +61,8 @@ def main():
         if (sys.argv[1] == "config"):
             for game, location in [["GI", ".../GenshinImpact_Data/StreamingAssets/VideoAssets/StandaloneWindows64/"], ["ZZ", "???"], ["SR", "???"]]:
                 while True:
-                    print("\n      NOTE: Should be at `" + location + "`")
-                    print("      NOTE: Leave empty if you're not gonna be modifying " + game)
+                    print("\n   NOTE: Should be at `" + location + "`")
+                    print("   NOTE: Leave empty if you're not gonna be modifying " + game)
                     directory = input(game + ' video assets directory: ')
                     if (directory != ""):
                         has_usm_file = False
@@ -93,7 +100,7 @@ def main():
             os.makedirs(sys.argv[2] + "/" + cutscene_name, exist_ok=True)
 
             path_to_video_assets_dir = get_mod_video_file_location(sys.argv[2])
-            if (not os.path.isfile(path_to_video_assets_dir + "/" + cutscene_name + ".usm")):
+            if (not (os.path.isfile(path_to_video_assets_dir + "/" + cutscene_name + ".usm") or cutscene_name[0] == '*')):
                 raise Exception("Cutscene " + path_to_video_assets_dir + "/" + cutscene_name + ".usm not found.")
 
             try:
@@ -249,7 +256,7 @@ def main():
                 shutil.rmtree(".temp")
             except:
                 pass
-            os.makedirs(".temp/usm")
+            os.mkdir(".temp")
             mod_dir = sys.argv[2]
 
             path_to_video_assets_dir = get_mod_video_file_location(mod_dir)
@@ -257,7 +264,7 @@ def main():
             if (os.path.isfile(sys.argv[2])):
                 if (sys.argv[2].endswith("." + get_mod_game(sys.argv[2]) + "cr")):
                     with zipfile.ZipFile(path_to_zip_file, 'r') as gicr_file:
-                        gicr_file.extractall(".temp/extracted")
+                        gicr_file.extractall(".temp")
                         mod_dir = ".temp"
                         print("Unzipped the zip.")
                 else:
@@ -265,46 +272,12 @@ def main():
             elif (not os.path.isdir(sys.argv[2])):
                 raise Exception('Mod file or dir does not exist!')
 
-            for f in os.scandir(mod_dir):
-                if f.is_dir():
-                    print("Changing cutscene: " + f.name)
-                    path_to_target_usm = path_to_video_assets_dir + "/" + f.name + ".usm"
-                    if (not os.path.isfile(path_to_target_usm)):
-                        raise Exception(path_to_target_usm + " not found!")
-                    usm_key = usm.recover_key(path_to_target_usm).candidates[0].key
-                    print('   Found key: {:X}'.format(usm_key))
-
-                    base_file_path = f.path + "/" + f.name
-                    video_path = base_file_path + ".ivf"
-                    audio_paths = [base_file_path + ".hca", base_file_path + ".hca", base_file_path + ".hca", base_file_path + ".hca"]
-                    if (os.path.isfile(base_file_path + "-CN.hca")):
-                        audio_paths[0] = base_file_path + "-CN.hca"
-                    if (os.path.isfile(base_file_path + "-EN.hca")):
-                        audio_paths[0] = base_file_path + "-EN.hca"
-                    if (os.path.isfile(base_file_path + "-JP.hca")):
-                        audio_paths[0] = base_file_path + "-JP.hca"
-                    if (os.path.isfile(base_file_path + "-KR.hca")):
-                        audio_paths[0] = base_file_path + "-KR.hca"
-
-                    for i, audio_path in enumerate(audio_paths):
-                        if (not os.path.isfile(audio_path)):
-                            lang_dict = {0: "CN", 1: "EN", 2: "JP", 3: "KR"}
-                            raise Exception('No sound path found for language ' + lang_dict[i] + '!')
-
-                    usm.mux_to_file(
-                        output_path=".temp/usm/"+f.name+".usm",
-                        video_path=video_path,
-                        audio_paths=audio_paths,
-                        encrypt_audio=False,
-                        key=usm_key,
-                    )
-
             src_dir = path_to_video_assets_dir
             dst_dir = path_to_video_assets_dir + "/originals"
             try:
+                all_files = os.listdir(src_dir)
                 os.mkdir(dst_dir)
                 print('Creating backup at ' + dst_dir + '.')
-                all_files = os.listdir(src_dir)
                 for file in all_files:
                     src_path = src_dir + "/" + file
                     dst_path = dst_dir + "/" + file
@@ -312,14 +285,59 @@ def main():
             except:
                 print('Backup already exists or an error occured.')
 
-            src_dir = ".temp/usm/"
-            dst_dir = path_to_video_assets_dir
-            all_files = os.listdir(src_dir)
-            for file in all_files:
-                src_path = src_dir + "/" + file
-                dst_path = dst_dir + "/" + file
-                cp(src_path, dst_path)
-                print('   Replaced ' + dst_path + ".")
+            for f in os.scandir(mod_dir):
+                if f.is_dir():
+                    if (f.name[0] == "*"):
+                        while True:
+                            print("\n   NOTE: Use `XXCR.py cutscenes` to list all available cutscenes.")
+                            cutscenes_to_replace = input(f.name + " is a wildcard cutscene, enter cutscene name to override (or multiple space-separated cutscenes): ").split()
+                            are_all_cutscenes_found = True
+                            for cutscene_to_replace in cutscenes_to_replace:
+                                path_to_target_usm = path_to_video_assets_dir + "/" + cutscene_to_replace + ".usm"
+                                if (not os.path.isfile(path_to_target_usm)):
+                                    are_all_cutscenes_found = False
+                                    print("   " + path_to_target_usm + " not found!")
+                                    break
+                            if (are_all_cutscenes_found):
+                                break
+                    else:
+                        cutscenes_to_replace = [f.name]
+                        path_to_target_usm = path_to_video_assets_dir + "/" + f.name + ".usm"
+                        if (not os.path.isfile(path_to_target_usm)):
+                            raise Exception(path_to_target_usm + " not found!")
+
+                    
+                    for cutscene_to_replace in cutscenes_to_replace:
+                        print("Changing cutscene: " + cutscene_to_replace)
+                        path_to_target_usm = path_to_video_assets_dir + "/" + cutscene_to_replace + ".usm"
+                        usm_key = usm.recover_key(path_to_target_usm).candidates[0].key
+                        print('   Found key: {:X}'.format(usm_key))
+
+                        base_file_path = f.path + "/" + f.name
+                        video_path = base_file_path + ".ivf"
+                        audio_paths = [base_file_path + ".hca", base_file_path + ".hca", base_file_path + ".hca", base_file_path + ".hca"]
+                        if (os.path.isfile(base_file_path + "-CN.hca")):
+                            audio_paths[0] = base_file_path + "-CN.hca"
+                        if (os.path.isfile(base_file_path + "-EN.hca")):
+                            audio_paths[0] = base_file_path + "-EN.hca"
+                        if (os.path.isfile(base_file_path + "-JP.hca")):
+                            audio_paths[0] = base_file_path + "-JP.hca"
+                        if (os.path.isfile(base_file_path + "-KR.hca")):
+                            audio_paths[0] = base_file_path + "-KR.hca"
+
+                        for i, audio_path in enumerate(audio_paths):
+                            if (not os.path.isfile(audio_path)):
+                                lang_dict = {0: "CN", 1: "EN", 2: "JP", 3: "KR"}
+                                raise Exception('No sound path found for language ' + lang_dict[i] + '!')
+
+                        usm.mux_to_file(
+                            output_path=path_to_target_usm,
+                            video_path=video_path,
+                            audio_paths=audio_paths,
+                            encrypt_audio=False,
+                            key=usm_key,
+                        )
+                        print('   Replaced ' + path_to_target_usm + ".")
 
             shutil.rmtree(".temp")
         elif (sys.argv[1] == "revert"):
@@ -341,7 +359,23 @@ def main():
                 print("  Reverted " + dst_path + ".")
             if (remove_backup):
                 os.rmtree(src_dir)
+        elif (sys.argv[1] == "cutscenes"):
+            if (len(sys.argv) <= 2 or not sys.argv[2].lower() in ['gi', 'zz', 'sr']):
+                print("Not enough arguments or invalid game!")
+                print_help()
+                return
+
+            path_to_video_assets_dir = get_config()[game_id_from_name[sys.argv[2].lower()]][:-1]
+
+            separator = sys.argv[3] if (len(sys.argv) > 3) else '   '
+
+            cutscenes = os.listdir(path_to_video_assets_dir)
+            for cutscene in cutscenes:
+                if (not cutscene.endswith(".usm")):
+                    cutscenes.remove(cutscene)
+            print(separator.join(cutscenes))
         else:
             print_help()
 
-main()
+if (sys.argv[0] == "XXCR.py"):
+    main()
