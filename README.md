@@ -1,5 +1,5 @@
 # XX Cutscene Replacer
-A simple CLT for replacing cutscenes in Genshin, ZZZ and HSR  
+A simple CLT for modding .usm cutscenes in Genshin, ZZZ and HSR  
 
 ## Usage
 Install python, run:
