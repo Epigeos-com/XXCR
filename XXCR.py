@@ -351,14 +351,14 @@ def main():
                                     print("Converting " + wav_path + " to .adx with CriCodecs.")
                                     adx_config = adx.AdxEncodeConfig()
                                     adx_config.sample_rate = 48_000
-                                    adx_config.channel_count = 2
+                                    adx_config.channels = 2
                                     adx_config.encoding_mode = 3
                                     adx_config.block_size = 18
                                     adx_config.bit_depth = 4
                                     adx_config.highpass_freq = 500
                                     adx_config.version = 4
                                     with open(wav_path, "rb") as wav_file_rb:
-                                        adx_bytes = hca.encode(wav_file_rb.read(), adx_config)
+                                        adx_bytes = adx.encode(wav_file_rb.read(), adx_config)
                                     with open(target_file_path, "wb") as target_file_wb:
                                         target_file_wb.write(adx_bytes)
                                 else:
@@ -414,19 +414,22 @@ def main():
                     }
                 )
 
-                audio_extension = get_file_extension(False, game)
-                are_all_audio_files_so_far_provided = True
-                for arg in ["-cn", "-en", "-jp", "-kr", "-a"]:
-                    if (arg in sys.argv):
-                        audio_file = sys.argv[sys.argv.index(arg) + 1]
-                        audio_file = audio_file if (audio_file.endswith(audio_extension)) else audio_file + audio_extension
-                        if (not os.path.isfile(mod_dir + "/files/" + audio_file)):
-                            raise Exception("Audio file " + mod_dir + "/files/" + audio_file + " not found. Use `XXCR.py files` first.")
-                        mod_metadata["replacements"][cutscene_name]["files"].update({arg[1:]: "files/" + audio_file})
-                    else:
-                        if (arg == "-a" and not are_all_audio_files_so_far_provided):
-                            raise Exception("Not all languages have a sound path. Use -a to provide a default for all langauges.")
-                        are_all_audio_files_so_far_provided = False
+                if (game != "zz"):
+                    audio_extension = get_file_extension(False, game)
+                    are_all_audio_files_so_far_provided = True
+                    for arg in ["-cn", "-en", "-jp", "-kr", "-a"]:
+                        if (arg in sys.argv):
+                            audio_file = sys.argv[sys.argv.index(arg) + 1]
+                            audio_file = audio_file if (audio_file.endswith(audio_extension)) else audio_file + audio_extension
+                            if (not os.path.isfile(mod_dir + "/files/" + audio_file)):
+                                raise Exception("Audio file " + mod_dir + "/files/" + audio_file + " not found. Use `XXCR.py files` first.")
+                            mod_metadata["replacements"][cutscene_name]["files"].update({arg[1:]: "files/" + audio_file})
+                        else:
+                            if (arg == "-a" and not are_all_audio_files_so_far_provided):
+                                raise Exception("Not all languages have a sound path. Use -a to provide a default for all langauges.")
+                            are_all_audio_files_so_far_provided = False
+                elif (len(sys.argv) > 5 and sys.argv[5] in ["-cn", "-en", "-jp", "-kr", "-a"]):
+                    raise Exception("ZZ stores sound separately from cutscenes. Use XXAR instead to replace ZZ cutscene sounds.")
 
                 with open(mod_dir + "/metadata.json", "w") as metadata_file:
                     metadata_file.write(json.dumps(mod_metadata, indent=2))
