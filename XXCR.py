@@ -1,10 +1,10 @@
 from cricodecs import hca, adx, usm
+from ffmpeg import FFmpeg
 import sys
 import os
 import shutil
-from ffmpeg import FFmpeg
-import zipfile
 import io
+import zipfile
 import subprocess
 import platform
 from glob import glob
@@ -61,7 +61,7 @@ def get_file_extension(is_video, game):
             case "gi":
                 return ".hca"
             case "zz":
-                raise Exception('For ZZZ only the -v argument is available as audio is stored separately - use XXAR for audio instead.')
+                raise Exception('For ZZZ only video is available as audio is stored separately - use XXAR for audio instead.')
             case "sr":
                 return ".adx"
 def remove_trailing_slash(text):
@@ -71,7 +71,7 @@ def remove_trailing_slash(text):
 
 def cp(src, dst):
     if (platform.system() == "Linux"):
-        subprocess.run(['cp', src, dst])
+        subprocess.run(['cp', src, dst]) # This is a lot faster
     else:
         shutil.copy(src, dst)
 
@@ -126,16 +126,18 @@ def main():
 
             cutscenes = [*mod_metadata["replacements"]]
             uses_all_cutscene = False
+            uses_all_cutscene_from_index = -1
             if ("all" in cutscenes):
-                uses_all_cutscene = True
                 cutscenes.remove("all")
+                uses_all_cutscene = True
+                uses_all_cutscene_from_index = len(cutscenes) - 1
                 all_available_cutscene_paths = [y for x in os.walk(path_to_video_assets_dir) for y in glob(os.path.join(x[0], '*.usm'))]
                 for available_cutscene_path in all_available_cutscene_paths:
                     available_cutscene = available_cutscene_path[:-4][len(path_to_video_assets_dir):]
                     if (not available_cutscene in cutscenes):
                         cutscenes += [available_cutscene]
-            for cutscene in cutscenes:
-                cutscene_name_in_metadata = "all" if (uses_all_cutscene) else cutscene
+            for i, cutscene in enumerate(cutscenes):
+                cutscene_name_in_metadata = "all" if (uses_all_cutscene and i > uses_all_cutscene_from_index) else cutscene
                 path_to_target_usm = path_to_video_assets_dir + "/" + cutscene + ".usm"
                 if (not os.path.isfile(path_to_target_usm)):
                     raise Exception(path_to_target_usm + " not found!")
@@ -448,7 +450,7 @@ def main():
 
                 if (not os.path.isfile(mod_dir + "/" + script_path_relative_to_mod_dir)):
                     with open(mod_dir + "/" + script_path_relative_to_mod_dir, "x") as script_file:
-                        script_file.write("# Example mod script: replace all of (Genshin's) male traveler cutscenes with their female counterparts\n\n# Some available vars: mod_dir, cutscene (name), mod_metadata, path_to_video_assets_dir, path_to_target_usm_persistent, path_to_target_usm, usm_key\n# Must be set: change_cutscene, if that's True also video_path and for GI and HSR audio_paths (audio_paths in the order CN, EN, JP, KR)\n\nif (cutscene.endswith('Boy')):\n    change_cutscene = True\n    \n    audio_paths = []\n    replacement_usm_path = path_to_target_usm[:-7] + 'Girl.usm' # Get key and demux the Girl version\n    usm_key = usm.recover_key(replacement_usm_path).candidates[0].key\n    demux = usm.demux(replacement_usm_path, key=usm_key)\n\n    try:\n        shutil.rmtree(mod_dir + '/.temp')\n    except:\n        pass\n\n    try:\n        os.mkdir(mod_dir + '/.temp')\n    except:\n        pass\n\n    for stream_name, file_bytes in demux.items():\n        file_path = mod_dir + '/.temp/' + stream_name\n        with open(file_path, 'wb') as file:\n            file.write(file_bytes)\n        if (file_bytes.startswith(b'HCA')):\n            audio_paths += [file_path]\n        else:\n            video_path = file_path\nelse:\n    change_cutscene = False")
+                        script_file.write("# Example mod script: replace all of Genshin's male traveler cutscenes with their female counterparts\n\n# Some available vars: mod_dir, cutscene (name), mod_metadata, path_to_video_assets_dir, path_to_target_usm_persistent, path_to_target_usm, usm_key\n# Must be set: change_cutscene, if that's True also video_path and for GI and HSR audio_paths (audio_paths in the order CN, EN, JP, KR)\n\nif (cutscene.endswith('Boy')):\n    change_cutscene = True\n    \n    audio_paths = []\n    replacement_usm_path = path_to_target_usm[:-7] + 'Girl.usm' # Get key and demux the Girl version\n    usm_key = usm.recover_key(replacement_usm_path).candidates[0].key\n    demux = usm.demux(replacement_usm_path, key=usm_key)\n\n    try:\n        shutil.rmtree(mod_dir + '/.temp')\n    except:\n        pass\n\n    try:\n        os.mkdir(mod_dir + '/.temp')\n    except:\n        pass\n\n    for stream_name, file_bytes in demux.items():\n        file_path = mod_dir + '/.temp/' + stream_name\n        with open(file_path, 'wb') as file:\n            file.write(file_bytes)\n        if (file_bytes.startswith(b'HCA')):\n            audio_paths += [file_path]\n        else:\n            video_path = file_path\nelse:\n    change_cutscene = False")
 
 
             for cutscene_name in sys.argv[3].split(','):
