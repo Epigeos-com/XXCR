@@ -200,7 +200,7 @@ def main():
                         if (game != "zz"):
                             audio_paths = script_locals['audio_paths']
                             if (len(audio_paths) != 4):
-                                raise Exception('Invalid audio_paths returned by script - len should be 4: [CN, EN, JP, KR].')
+                                raise Exception('Invalid audio_paths returned by script: ' + str(audio_paths) + ' - len should be 4: [CN, EN, JP, KR].')
                         elif ('audio_paths' in script_locals):
                             raise Exception('Script wants to change sound for ZZ. This can only be done through XXAR, as ZZ stores sound separately.')
                 else:
@@ -268,6 +268,10 @@ def main():
             mod_metadata["build_date"] = str(datetime.now(timezone.utc))
             with open(mod_dir + "/metadata.json", "w") as metadata_file:
                 metadata_file.write(json.dumps(mod_metadata, indent=2))
+            try:
+                shutil.rmtree(mod_dir + "/.temp")
+            except:
+                pass
 
             shutil.make_archive(mod_dir, 'zip', mod_dir)
             os.rename(mod_dir + ".zip", mod_dir + "." + game + "cr")
@@ -453,7 +457,7 @@ def main():
 
                 if (not os.path.isfile(mod_dir + "/" + script_path_relative_to_mod_dir)):
                     with open(mod_dir + "/" + script_path_relative_to_mod_dir, "x") as script_file:
-                        script_file.write("# Example mod script: replace all of Genshin's male traveler cutscenes with their female counterparts\n\n# Some available vars: mod_dir, cutscene (name), mod_metadata, path_to_video_assets_dir, path_to_target_usm_persistent, path_to_target_usm, usm_key\n# Must be set: change_cutscene, if that's True also video_path and for GI and HSR audio_paths (audio_paths in the order CN, EN, JP, KR)\n\nif (cutscene.endswith('Boy')):\n    change_cutscene = True\n    \n    audio_paths = []\n    replacement_usm_path = path_to_target_usm[:-7] + 'Girl.usm' # Get key and demux the Girl version\n    usm_key = usm.recover_key(replacement_usm_path).candidates[0].key\n    demux = usm.demux(replacement_usm_path, key=usm_key)\n\n    try:\n        shutil.rmtree(mod_dir + '/.temp')\n    except:\n        pass\n\n    try:\n        os.mkdir(mod_dir + '/.temp')\n    except:\n        pass\n\n    for stream_name, file_bytes in demux.items():\n        file_path = mod_dir + '/.temp/' + stream_name\n        with open(file_path, 'wb') as file:\n            file.write(file_bytes)\n        if (file_bytes.startswith(b'HCA')):\n            audio_paths += [file_path]\n        else:\n            video_path = file_path\nelse:\n    change_cutscene = False")
+                        script_file.write("# Example mod script: replace all of Genshin's male traveler cutscenes with their female counterparts\n\n# Some available vars: mod_dir, cutscene (name), mod_metadata, path_to_video_assets_dir, path_to_target_usm_persistent, path_to_target_usm, usm_key\n# Must be set: change_cutscene, if that's True also video_path and for GI and HSR audio_paths (audio_paths in the order CN, EN, JP, KR)\n\nif (cutscene.endswith('Boy') and cutscene != 'Cs_Beyond_Backstory_Boy'):\n    change_cutscene = True\n    \n    audio_paths = [None, None, None, None]\n    replacement_usm_path = path_to_target_usm[:-7] + 'Girl.usm' # Get and load the Girl version\n    usm_key = usm.recover_key(replacement_usm_path).candidates[0].key\n    usm_load = usm.load(replacement_usm_path, key=usm_key)\n\n    try:\n        shutil.rmtree(mod_dir + '/.temp')\n    except:\n        pass\n\n    try:\n        os.mkdir(mod_dir + '/.temp')\n    except:\n        pass\n\n    for i in range(usm_load.stream_count):\n        stream = usm_load.stream(i)\n        file_bytes = usm_load.stream_bytes(i)\n        stream_filename = os.path.basename(stream.filename)\n        if (stream.stream_id == usm.UsmChunkType.SFA):\n            stream_filename = stream_filename if (stream_filename != '') else 'sfa_ch' + str(stream.channel_no)\n            file_path = mod_dir + '/.temp/' + stream_filename\n\n            audio_paths[stream.channel_no] = file_path\n\n            with open(file_path, 'wb') as file:\n                file.write(file_bytes)\n        elif (stream.stream_id == usm.UsmChunkType.SFV):\n            stream_filename = stream_filename if (stream_filename != '') else 'sfv_ch' + str(stream.channel_no)\n            file_path = mod_dir + '/.temp/' + stream_filename\n\n            video_path = file_path\n\n            with open(file_path, 'wb') as file:\n                file.write(file_bytes)\nelse:\n    change_cutscene = False")
 
 
             for cutscene_name in sys.argv[3].split(','):
@@ -502,11 +506,12 @@ def main():
             convert_to_video_index = sys.argv.index("-cv") if "-cv" in sys.argv else None
             convert_to_audio_index = sys.argv.index("-ca") if "-ca" in sys.argv else None
 
+            game = sys.argv[2].lower()
             extracted_dir = sys.argv[2].upper() + "_extracted/"
-            sound_file_extension = ".hca" if (sys.argv[2].lower() == "gi") else "adx"
+            sound_file_extension = ".hca" if (game == "gi") else ".adx"
             os.makedirs(extracted_dir, exist_ok=True)
 
-            path_to_video_assets_dir = get_config()[supported_games[sys.argv[2].lower()]][:-1]
+            path_to_video_assets_dir = get_config()[supported_games.index(sys.argv[2].lower())][:-1]
             for cutscene_name in sys.argv[3].split(","):
                 base_cutscene_name = os.path.basename(cutscene_name)
                 usm_path = path_to_video_assets_dir + cutscene_name + ".usm"
@@ -514,17 +519,17 @@ def main():
                     print("Extracting " + cutscene_name)
                     cutscene_dir = extracted_dir + cutscene_name
                     os.makedirs(cutscene_dir)
-                    sound_index = 0
                     languages = ["CN", "EN", "JP", "KR"]
                     usm_key = usm.recover_key(usm_path).candidates[0].key
-                    demux = usm.demux(usm_path, key=usm_key)
-                    for stream_name in demux.keys():
-                        if (stream_name.endswith(sound_file_extension)):
-                            sound_file_name = base_cutscene_name + "-" + languages[sound_index] + sound_file_extension
+                    usm_load = usm.load(usm_path, key=usm_key)
+                    for i in range(usm_load.stream_count):
+                        stream = usm_load.stream(i)
+                        file_bytes = usm_load.stream_bytes(i)
+                        if (stream.stream_id == usm.UsmChunkType.SFA): # Audio
+                            sound_file_name = base_cutscene_name + "-" + languages[stream.channel_no] + sound_file_extension
                             sound_file_path = cutscene_dir + "/" + sound_file_name
                             with open(sound_file_path, "wb") as file:
-                                file.write(demux[stream_name])
-                                sound_index += 1
+                                file.write(file_bytes)
                             if (convert_to_audio_index != None):
                                 wav_file_path = sound_file_path[:-4] + ".wav"
                                 sound_file_class = hca if (sound_file_extension == ".hca") else adx
@@ -544,11 +549,11 @@ def main():
                                     )
                                     ffmpeg.execute()
                                     os.remove(wav_file_path)
-                        elif (stream_name.endswith(".ivf")):
+                        elif (stream.stream_id == usm.UsmChunkType.SFV): # Video
                             ivf_name = base_cutscene_name + ".ivf"
                             ivf_path = cutscene_dir + "/" + ivf_name
                             with open(ivf_path, "wb") as file:
-                                file.write(demux[stream_name])
+                                file.write(file_bytes)
                             if (convert_to_video_index != None):
                                 ffmpeg = (
                                     FFmpeg()
@@ -560,8 +565,6 @@ def main():
 
                                 os.makedirs(cutscene_dir + "/unconverted", exist_ok=True)
                                 os.rename(ivf_path, cutscene_dir + "/unconverted/" + ivf_name)
-                        else:
-                            print("   Unknown file type: " + stream_name + ".")
 
                     print("Successfully extracted " + cutscene_name)
                 else:
