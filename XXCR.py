@@ -40,6 +40,7 @@ def print_help():
     print("\n      XXCR.py list-cutscenes (GI|ZZ|SR) (<separator>)")
     print("\n      XXCR.py extract-cutscenes (GI|ZZ|SR) <comma_separated_cutscene_names> (-cv <target_video_format>) (-ca <target_audio_format>)")
 
+version = "1.0.2"
 supported_games = ["gi", "zz", "sr"]
 def get_config():
     try:
@@ -68,7 +69,10 @@ def remove_trailing_slash(text):
     if (text.endswith("/") or text.endswith("\\")):
         text = text[:-1]
     return text
-
+def recover_key(source, file_type_class):
+    key = file_type_class.recover_key(source).candidates[0].key
+    print('   Found key: {:X}'.format(key))
+    return key
 def cp(src, dst):
     if (platform.system() == "Linux"):
         subprocess.run(['cp', src, dst]) # This is a lot faster
@@ -146,17 +150,16 @@ def main():
                 print("Changing cutscene: " + cutscene)
 
                 path_to_target_usm_persistent = path_to_target_usm.replace("StreamingAssets", "Persistent")
-                usm_key = usm.recover_key(path_to_target_usm).candidates[0].key
-                print('   Found key: {:X}'.format(usm_key))
-
+                usm_key = recover_key(path_to_target_usm, usm)
                 usm_load = usm.load(path_to_target_usm, key=usm_key)
+
                 for i in range(usm_load.stream_count):
                     stream = usm_load.stream(i)
                     if (stream.stream_id == usm.UsmChunkType.SFA):
                         file_bytes = usm_load.stream_bytes(i)
-                        sound_filetype_class = hca if (game == "gi") else adx
+                        sound_file_type_class = hca if (game == "gi") else adx
                         try:
-                            hca_key = sound_filetype_class.recover_key(file_bytes).candidates[0].key
+                            recover_key(file_bytes, sound_file_type_class)
                             encrypt_audio = True
                         except:
                             pass
@@ -260,14 +263,14 @@ def main():
                 metadata_file.write(
                     '{\n'
                     '  "game": "%s",\n'
-                    '  "format_version": "1.0",\n'
+                    '  "app_version": "%s",\n'
                     '  "name": "%s",\n'
                     '  "author": "%s",\n'
                     '  "description": "%s",\n'
                     '  "created_date": "%s",\n'
                     '  "build_date": "",\n'
                     '  "replacements": {}\n'
-                    '}' % (mod_game, mod_name, author, description, datetime.now(timezone.utc))
+                    '}' % (mod_game, version, mod_name, author, description, datetime.now(timezone.utc))
                 )
 
             print("Created mod " + mod_name + " for game " + mod_game.upper() + ".")
@@ -473,7 +476,7 @@ def main():
 
                 if (not os.path.isfile(mod_dir + "/" + script_path_relative_to_mod_dir)):
                     with open(mod_dir + "/" + script_path_relative_to_mod_dir, "x") as script_file:
-                        script_file.write("# Example mod script: replace all of Genshin's male traveler cutscenes with their female counterparts\n\n# Some available vars: mod_dir, cutscene (name), mod_metadata, path_to_video_assets_dir, path_to_target_usm_persistent, path_to_target_usm, usm_key\n# Must be set: change_cutscene, if that's True also video_path and for GI and HSR audio_paths (audio_paths in the order CN, EN, JP, KR)\n\nif (cutscene.endswith('Boy')):\n    change_cutscene = True\n    \n    audio_paths = [None, None, None, None]\n    replacement_usm_path = path_to_target_usm[:-7] + 'Girl.usm' # Get and load the Girl version\n    usm_key = usm.recover_key(replacement_usm_path).candidates[0].key\n    usm_load = usm.load(replacement_usm_path, key=usm_key)\n\n    try:\n        shutil.rmtree(mod_dir + '/.temp')\n    except:\n        pass\n\n    try:\n        os.mkdir(mod_dir + '/.temp')\n    except:\n        pass\n\n    for i in range(usm_load.stream_count):\n        stream = usm_load.stream(i)\n        file_bytes = usm_load.stream_bytes(i)\n        stream_filename = os.path.basename(stream.filename)\n        if (stream.stream_id == usm.UsmChunkType.SFA):\n            \n            stream_filename = stream_filename if (stream_filename != '') else 'sfa_ch' + str(stream.channel_no)\n            file_path = mod_dir + '/.temp/' + stream_filename\n\n            audio_paths[stream.channel_no] = file_path\n\n            try:\n                hca_key = hca.recover_key(file_bytes).candidates[0].key # HSR would use ADX instead of HCA\n                file_bytes = hca.decrypt(file_bytes, keycode=hca_key)\n            except:\n                pass\n\n            with open(file_path, 'wb') as file:\n                file.write(file_bytes)\n        elif (stream.stream_id == usm.UsmChunkType.SFV):\n            stream_filename = stream_filename if (stream_filename != '') else 'sfv_ch' + str(stream.channel_no)\n            file_path = mod_dir + '/.temp/' + stream_filename\n\n            video_path = file_path\n\n            with open(file_path, 'wb') as file:\n                file.write(file_bytes)\nelse:\n    change_cutscene = False")
+                        script_file.write("# Example mod script: replace all of Genshin's male traveler cutscenes with their female counterparts\n\n# Some available vars: mod_dir, cutscene (name), mod_metadata, path_to_video_assets_dir, path_to_target_usm_persistent, path_to_target_usm, usm_key\n# Some available functions: recover_key(source, file_type_class), get_file_extension(is_video, game)\n# Must be set: change_cutscene, if that's True also video_path and for GI and HSR audio_paths (audio_paths in the order CN, EN, JP, KR)\n\nif (cutscene.endswith('Boy')):\n    change_cutscene = True\n    \n    audio_paths = [None, None, None, None]\n    replacement_usm_path = path_to_target_usm[:-7] + 'Girl.usm' # Get and load the Girl version\n    usm_key = recover_key(replacement_usm_path, usm)\n    usm_load = usm.load(replacement_usm_path, key=usm_key)\n\n    try:\n        shutil.rmtree(mod_dir + '/.temp')\n    except:\n        pass\n\n    try:\n        os.mkdir(mod_dir + '/.temp')\n    except:\n        pass\n\n    for i in range(usm_load.stream_count):\n        stream = usm_load.stream(i)\n        file_bytes = usm_load.stream_bytes(i)\n        stream_filename = os.path.basename(stream.filename)\n        if (stream.stream_id == usm.UsmChunkType.SFA):\n            \n            stream_filename = stream_filename if (stream_filename != '') else 'sfa_ch' + str(stream.channel_no)\n            file_path = mod_dir + '/.temp/' + stream_filename\n\n            audio_paths[stream.channel_no] = file_path\n\n            try:\n                hca_key = recover_key(file_bytes, hca) # HSR would use ADX instead of HCA\n                file_bytes = hca.decrypt(file_bytes, keycode=hca_key)\n            except:\n                pass\n\n            with open(file_path, 'wb') as file:\n                file.write(file_bytes)\n        elif (stream.stream_id == usm.UsmChunkType.SFV):\n            stream_filename = stream_filename if (stream_filename != '') else 'sfv_ch' + str(stream.channel_no)\n            file_path = mod_dir + '/.temp/' + stream_filename\n\n            video_path = file_path\n\n            with open(file_path, 'wb') as file:\n                file.write(file_bytes)\nelse:\n    change_cutscene = False")
 
 
             for cutscene_name in sys.argv[3].split(','):
@@ -536,7 +539,7 @@ def main():
                     cutscene_dir = extracted_dir + cutscene_name
                     os.makedirs(cutscene_dir)
                     languages = ["CN", "EN", "JP", "KR"]
-                    usm_key = usm.recover_key(usm_path).candidates[0].key
+                    usm_key = recover_key(usm_path, usm)
                     usm_load = usm.load(usm_path, key=usm_key)
                     for i in range(usm_load.stream_count):
                         stream = usm_load.stream(i)
@@ -550,7 +553,7 @@ def main():
                                 wav_file_path = sound_file_path[:-4] + ".wav"
                                 sound_file_class = hca if (sound_file_extension == ".hca") else adx
                                 try:
-                                    sound_file_key = sound_file_class.recover_key(sound_file_path).candidates[0].key
+                                    sound_file_key = recover_key(sound_file_path, sound_file_class)
                                 except:
                                     sound_file_key = None
                                 with open(wav_file_path, "wb") as file:
