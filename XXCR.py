@@ -84,9 +84,11 @@ def main():
         print_help()
     else:
         if (sys.argv[1] == "config"):
-            for game, location in [["GI", ".../GenshinImpact_Data/StreamingAssets/VideoAssets/StandaloneWindows64/"], ["ZZ", ".../ZenlessZoneZero_Data/StreamingAssets/Video/HD/"], ["SR", ".../StarRail_Data/StreamingAssets/Video/Windows/"]]:
+            for game, location, windows_specific_location in [["GI", "/path/to/GenshinImpact_Data/StreamingAssets/VideoAssets/StandaloneWindows64/", "C:/Program Files/Genshin Impact/Genshin Impact Game"], ["ZZ", "/path/to/ZenlessZoneZero_Data/StreamingAssets/Video/HD/", "C:/Program Files/Zenless Zone Zero/Zenless Zone Zero Game"], ["SR", "/path/to/StarRail_Data/StreamingAssets/Video/Windows/", "C:/Program Files/HoYoPlay/games/Star Rail Games"]]:
+                if (platform.system() == "Windows"):
+                    location = windows_specific_location + location[8:]
                 while True:
-                    print("\n   NOTE: Should be at `" + location + "`")
+                    print("\n   NOTE: Should be at `" + location + "` and should contain .usm files")
                     print("   NOTE: Leave empty if you're not gonna be modifying " + game)
                     directory = input(game + ' video assets directory: ')
                     if (directory != ""):
@@ -98,7 +100,7 @@ def main():
                         if (not has_usm_file):
                             print("\n\nNo .usm file found in `" + directory + "`.\n")
                             continue
-                    with open("config.txt", "a") as file:
+                    with open("config.txt", "w") as file:
                         file.write(directory + "\n")
                     break
         elif (sys.argv[1] == "apply"):
@@ -140,6 +142,12 @@ def main():
                     available_cutscene = available_cutscene_path[:-4][len(path_to_video_assets_dir):]
                     if (not available_cutscene in cutscenes):
                         cutscenes += [available_cutscene]
+
+            if (len(cutscenes) == 0):
+                if (uses_all_cutscene):
+                    raise Exception('No available cutscenes, make sure the path set during config is correct')
+                else:
+                    raise Exception('Mod isn\'t set to modify any cutscenes')
 
             for i, cutscene in enumerate(cutscenes):
                 cutscene_name_in_metadata = "all" if (uses_all_cutscene and i > uses_all_cutscene_from_index) else cutscene
