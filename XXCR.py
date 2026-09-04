@@ -40,7 +40,7 @@ def print_help():
     print("\n      XXCR.py list-cutscenes (GI|ZZ|SR) (<separator>)")
     print("\n      XXCR.py extract-cutscenes (GI|ZZ|SR) <comma_separated_cutscene_names> (-cv <target_video_format>) (-ca <target_audio_format>)")
 
-version = "1.0.3"
+version = "1.0.4"
 supported_games = ["gi", "zz", "sr"]
 def get_config():
     try:
@@ -84,6 +84,8 @@ def main():
         print_help()
     else:
         if (sys.argv[1] == "config"):
+            with open("config.txt", "w") as file:
+                pass
             for game, location, windows_specific_location in [["GI", "/path/to/GenshinImpact_Data/StreamingAssets/VideoAssets/StandaloneWindows64/", "C:/Program Files/Genshin Impact/Genshin Impact Game"], ["ZZ", "/path/to/ZenlessZoneZero_Data/StreamingAssets/Video/HD/", "C:/Program Files/Zenless Zone Zero/Zenless Zone Zero Game"], ["SR", "/path/to/StarRail_Data/StreamingAssets/Video/Windows/", "C:/Program Files/HoYoPlay/games/Star Rail Games"]]:
                 if (platform.system() == "Windows"):
                     location = windows_specific_location + location[8:]
@@ -100,7 +102,7 @@ def main():
                         if (not has_usm_file):
                             print("\n\nNo .usm file found in `" + directory + "`.\n")
                             continue
-                    with open("config.txt", "w") as file:
+                    with open("config.txt", "a") as file:
                         file.write(directory + "\n")
                     break
         elif (sys.argv[1] == "apply"):
